@@ -13,15 +13,15 @@ import (
 
 const eventTimeout = 10 * time.Second
 
-// tempDir returns t.TempDir() routed through canonicalize so paths
+// tempDir returns TempDir() routed through canonicalize so paths
 // emitted by the watcher (which canonicalizes Add input) compare cleanly
 // against expected values regardless of platform-specific symlinks
 // (/var → /private/var on macOS) or 8.3 short forms on Windows.
-func tempDir(t *testing.T) string {
-	t.Helper()
-	d, err := canonicalize(t.TempDir())
+func tempDir(tb testing.TB) string {
+	tb.Helper()
+	d, err := canonicalize(tb.TempDir())
 	if err != nil {
-		t.Fatalf("canonicalize TempDir: %v", err)
+		tb.Fatalf("canonicalize TempDir: %v", err)
 	}
 	return d
 }
