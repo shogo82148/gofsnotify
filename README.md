@@ -81,6 +81,7 @@ Paths are canonicalized (absolute, cleaned, with symlinks resolved when the targ
 | Linux   | inotify                | Supported |
 | Windows | ReadDirectoryChangesW  | Supported |
 | macOS   | kqueue                 | Supported |
+| FreeBSD | kqueue                 | Supported |
 
 ## License
 

@@ -68,9 +68,9 @@ dedupe and `Event.Name` is stable:
 ## Testing
 
 Integration tests use real file system events — no mocks. The CI
-suite runs on Linux, macOS, and Windows with `-race` always
-enabled; if a backend gets flaky under `-race`, the timeout grows
-rather than `-race` getting dropped.
+suite runs on Linux, macOS, Windows, and FreeBSD (under a VM) with
+`-race` always enabled; if a backend gets flaky under `-race`, the
+timeout grows rather than `-race` getting dropped.
 
 ## Platform support
 
@@ -79,4 +79,5 @@ rather than `-race` getting dropped.
 | Linux   | inotify                | Supported |
 | Windows | ReadDirectoryChangesW  | Supported |
 | macOS   | kqueue                 | Supported |
+| FreeBSD | kqueue                 | Supported |
 | other   | stub returning `ErrUnsupported` | — |
