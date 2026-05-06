@@ -46,13 +46,17 @@ type Watcher struct {
 }
 
 type winWatch struct {
-	handle     syscall.Handle
-	path       string
-	op         Op
-	mask       uint32
-	recursive  bool
+	handle syscall.Handle
+	path   string
+	op     Op
+	mask   uint32
+	// buf must stay DWORD-aligned because ReadDirectoryChangesW dereferences
+	// it with that constraint; placing other fields before it can shift the
+	// offset on 64-bit Go and silently break the call. Keep buf early and
+	// push optional fields below overlapped.
 	buf        [watchBufferSize]byte
 	overlapped syscall.Overlapped
+	recursive  bool
 }
 
 // NewWatcher returns a Watcher backed by ReadDirectoryChangesW.
