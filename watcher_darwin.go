@@ -37,7 +37,7 @@ type kqWatch struct {
 	path      string
 	op        Op
 	isDir     bool
-	recursive bool // true only on the user-Add'd root for AddRecursive
+	recursive bool // true only on the user-added root for AddRecursive
 	parent    *kqWatch
 	children  map[string]*kqWatch
 }
