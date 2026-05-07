@@ -78,15 +78,13 @@ timeout grows rather than `-race` getting dropped.
 |---------|---------------------------------|-----------|
 | Linux   | inotify                         | Supported |
 | Windows | ReadDirectoryChangesW           | Supported |
-| macOS   | FSEvents (purego)               | Supported |
+| macOS   | kqueue (cgo_import_dynamic)    | Supported |
 | FreeBSD | kqueue                          | Supported |
 | other   | stub returning `ErrUnsupported` | —         |
 
 ### macOS backend
 
-On macOS the backend is FSEvents, called through
-[`purego`](https://github.com/ebitengine/purego) so cgo is not
-required. FSEvents monitors paths at the volume level without
-opening a file descriptor per watched entry, and supports native
-recursive watching — `AddRecursive` creates a single stream
-regardless of tree depth.
+On macOS the backend uses kqueue via `//go:cgo_import_dynamic`
+bindings to `libSystem`, so cgo is not required. Directory
+watches track child entries and recursive watches register and
+maintain subtree watches as the tree changes.

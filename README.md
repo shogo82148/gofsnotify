@@ -80,7 +80,7 @@ Paths are canonicalized (absolute, cleaned, with symlinks resolved when the targ
 |---------|-------------------------|-----------|
 | Linux   | inotify                 | Supported |
 | Windows | ReadDirectoryChangesW   | Supported |
-| macOS   | FSEvents (purego)       | Supported |
+| macOS   | kqueue (cgo_import_dynamic) | Supported |
 | FreeBSD | kqueue                  | Supported |
 
 ## License
