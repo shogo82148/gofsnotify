@@ -97,7 +97,7 @@ func BenchmarkAddRecursive(b *testing.B) {
 // counts while still exercising the walk + register cost.
 func buildFlatTree(tb testing.TB, root string, n int) {
 	tb.Helper()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if err := os.Mkdir(filepath.Join(root, "d"+strconv.Itoa(i)), 0o755); err != nil {
 			tb.Fatalf("Mkdir: %v", err)
 		}

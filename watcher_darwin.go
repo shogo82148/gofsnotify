@@ -433,7 +433,7 @@ func handleFSEventsCallback(clientInfo uintptr, n int, pathsPtr, flagsPtr unsafe
 
 	ptrSize := unsafe.Sizeof(uintptr(0))
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		// Read char* from the paths array (char**) without uintptr→unsafe.Pointer.
 		cStr := *(*unsafe.Pointer)(unsafe.Add(pathsPtr, uintptr(i)*ptrSize))
 		p := goString(cStr)
@@ -460,11 +460,9 @@ func handleFSEventsCallback(clientInfo uintptr, n int, pathsPtr, flagsPtr unsafe
 				key := pathKey(r.path)
 				if fs, exists := w.streams[key]; exists {
 					delete(w.streams, key)
-					w.cleanupW.Add(1)
-					go func() {
-						defer w.cleanupW.Done()
+					w.cleanupW.Go(func() {
 						stopStream(fs.stream)
-					}()
+					})
 				}
 			}
 			w.mu.Unlock()

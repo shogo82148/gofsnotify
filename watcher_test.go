@@ -629,7 +629,7 @@ func TestWatchDirWithSpace(t *testing.T) {
 }
 
 func TestConcurrentAddClose(t *testing.T) {
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		w, err := NewWatcher()
 		if err != nil {
 			t.Fatalf("NewWatcher: %v", err)
