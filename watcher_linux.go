@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 // Watcher monitors registered paths for file system changes via inotify.
@@ -46,7 +47,7 @@ type linuxWatch struct {
 func NewWatcher() (*Watcher, error) {
 	// IN_NONBLOCK keeps the fd pollable through Go's runtime poller so
 	// closing the *os.File wrapper reliably unblocks a pending Read.
-	fd, err := syscall.InotifyInit1(syscall.IN_CLOEXEC | syscall.IN_NONBLOCK)
+	fd, err := unix.InotifyInit1(unix.IN_CLOEXEC | unix.IN_NONBLOCK)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +126,7 @@ func (w *Watcher) add(path string, op Op, recursive bool) error {
 // addWatchLocked registers a single inotify watch and stores it.
 // Caller holds w.mu.
 func (w *Watcher) addWatchLocked(abs string, op Op, rootKey string, recursive bool) (*linuxWatch, error) {
-	wd, err := syscall.InotifyAddWatch(w.fd, abs, opToMask(op))
+	wd, err := unix.InotifyAddWatch(w.fd, abs, opToMask(op))
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +193,7 @@ func (w *Watcher) Remove(path string) error {
 		}
 	}
 	for _, lw := range toRemove {
-		_, _ = syscall.InotifyRmWatch(w.fd, uint32(lw.wd))
+		_, _ = unix.InotifyRmWatch(w.fd, uint32(lw.wd))
 		delete(w.watches, pathKey(lw.abs))
 		delete(w.wdToKey, lw.wd)
 	}
@@ -214,7 +215,7 @@ func (w *Watcher) Close() error {
 	file := w.file
 	w.mu.Unlock()
 	// Closing the *os.File wakes the goroutine's blocking Read via the
-	// runtime poller, unlike syscall.Close which can leave it stuck.
+	// runtime poller, unlike unix.Close which can leave it stuck.
 	err := file.Close()
 	<-w.exited
 	return err
@@ -234,7 +235,7 @@ func (w *Watcher) readLoop() {
 				return
 			default:
 			}
-			if errors.Is(err, syscall.EINTR) {
+			if errors.Is(err, unix.EINTR) {
 				continue
 			}
 			// os.ErrClosed surfaces when Close calls file.Close().
@@ -249,10 +250,10 @@ func (w *Watcher) readLoop() {
 		}
 
 		off := 0
-		for off+syscall.SizeofInotifyEvent <= n {
-			raw := (*syscall.InotifyEvent)(unsafe.Pointer(&buf[off]))
+		for off+unix.SizeofInotifyEvent <= n {
+			raw := (*unix.InotifyEvent)(unsafe.Pointer(&buf[off]))
 			nameLen := int(raw.Len)
-			nameStart := off + syscall.SizeofInotifyEvent
+			nameStart := off + unix.SizeofInotifyEvent
 			nameEnd := nameStart + nameLen
 			if nameEnd > n {
 				break
@@ -272,7 +273,7 @@ func (w *Watcher) dispatch(wd int32, mask uint32, name string) {
 	// IN_IGNORED arrives when the kernel drops the watch (target deleted,
 	// filesystem unmounted, or after explicit InotifyRmWatch). Clean up
 	// our maps so the path can be re-added.
-	if mask&syscall.IN_IGNORED != 0 {
+	if mask&unix.IN_IGNORED != 0 {
 		w.mu.Lock()
 		if key, ok := w.wdToKey[wd]; ok {
 			delete(w.watches, key)
@@ -316,7 +317,7 @@ func (w *Watcher) dispatch(wd int32, mask uint32, name string) {
 	// cause the same Create to be reported twice; this is documented on
 	// AddRecursive.
 	var synth []string
-	if recursive && mask&syscall.IN_CREATE != 0 && mask&syscall.IN_ISDIR != 0 {
+	if recursive && mask&unix.IN_CREATE != 0 && mask&unix.IN_ISDIR != 0 {
 		var addErr error
 		w.mu.Lock()
 		if !w.closed {
@@ -362,38 +363,38 @@ func (w *Watcher) sendError(err error) {
 func opToMask(op Op) uint32 {
 	var m uint32
 	if op.Has(Create) {
-		m |= syscall.IN_CREATE | syscall.IN_MOVED_TO
+		m |= unix.IN_CREATE | unix.IN_MOVED_TO
 	}
 	if op.Has(Write) {
-		m |= syscall.IN_MODIFY
+		m |= unix.IN_MODIFY
 	}
 	if op.Has(Remove) {
-		m |= syscall.IN_DELETE | syscall.IN_DELETE_SELF
+		m |= unix.IN_DELETE | unix.IN_DELETE_SELF
 	}
 	if op.Has(Rename) {
-		m |= syscall.IN_MOVED_FROM | syscall.IN_MOVE_SELF
+		m |= unix.IN_MOVED_FROM | unix.IN_MOVE_SELF
 	}
 	if op.Has(Chmod) {
-		m |= syscall.IN_ATTRIB
+		m |= unix.IN_ATTRIB
 	}
 	return m
 }
 
 func maskToOp(mask uint32) Op {
 	var op Op
-	if mask&(syscall.IN_CREATE|syscall.IN_MOVED_TO) != 0 {
+	if mask&(unix.IN_CREATE|unix.IN_MOVED_TO) != 0 {
 		op |= Create
 	}
-	if mask&syscall.IN_MODIFY != 0 {
+	if mask&unix.IN_MODIFY != 0 {
 		op |= Write
 	}
-	if mask&(syscall.IN_DELETE|syscall.IN_DELETE_SELF) != 0 {
+	if mask&(unix.IN_DELETE|unix.IN_DELETE_SELF) != 0 {
 		op |= Remove
 	}
-	if mask&(syscall.IN_MOVED_FROM|syscall.IN_MOVE_SELF) != 0 {
+	if mask&(unix.IN_MOVED_FROM|unix.IN_MOVE_SELF) != 0 {
 		op |= Rename
 	}
-	if mask&syscall.IN_ATTRIB != 0 {
+	if mask&unix.IN_ATTRIB != 0 {
 		op |= Chmod
 	}
 	return op

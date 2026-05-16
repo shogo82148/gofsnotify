@@ -28,7 +28,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
-	"syscall"
 
 	"github.com/gofsnotify/fsnotify"
 )
@@ -83,7 +82,7 @@ func main() {
 	}
 
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sigCh, terminationSignals()...)
 
 	for {
 		select {

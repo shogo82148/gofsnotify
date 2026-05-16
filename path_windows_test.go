@@ -4,9 +4,10 @@ package fsnotify
 
 import (
 	"strings"
-	"syscall"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 func TestCanonicalizeExpandsShortPath(t *testing.T) {
@@ -17,16 +18,16 @@ func TestCanonicalizeExpandsShortPath(t *testing.T) {
 		t.Fatalf("canonicalize(TempDir): %v", err)
 	}
 
-	longPtr, err := syscall.UTF16PtrFromString(long)
+	longPtr, err := windows.UTF16PtrFromString(long)
 	if err != nil {
 		t.Fatalf("UTF16PtrFromString: %v", err)
 	}
-	var buf [syscall.MAX_PATH]uint16
-	n, err := syscall.GetShortPathName(longPtr, &buf[0], uint32(len(buf)))
+	var buf [windows.MAX_PATH]uint16
+	n, err := windows.GetShortPathName(longPtr, &buf[0], uint32(len(buf)))
 	if err != nil || n == 0 {
 		t.Skipf("GetShortPathName unavailable: %v", err)
 	}
-	short := syscall.UTF16ToString(buf[:n])
+	short := windows.UTF16ToString(buf[:n])
 	if strings.EqualFold(short, long) {
 		t.Skip("temp dir has no distinct 8.3 short form")
 	}

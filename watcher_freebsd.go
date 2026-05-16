@@ -8,10 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
-// O_EVTONLY opens a file for kqueue notification only; not in stdlib syscall.
+// O_EVTONLY opens a file for kqueue notification only; not exposed by x/sys/unix.
 const oEvtOnly = 0x8000
 
 // Watcher monitors registered paths via kqueue. Directories are watched
@@ -47,25 +48,25 @@ type kqWatch struct {
 
 const closeEvId = 9999
 
-var evCloseRegister = syscall.Kevent_t{
+var evCloseRegister = unix.Kevent_t{
 	Ident:  closeEvId,
-	Filter: syscall.EVFILT_USER,
-	Flags:  syscall.EV_ADD | syscall.EV_CLEAR,
+	Filter: unix.EVFILT_USER,
+	Flags:  unix.EV_ADD | unix.EV_CLEAR,
 }
 
-var evCloseTrigger = syscall.Kevent_t{
+var evCloseTrigger = unix.Kevent_t{
 	Ident:  closeEvId,
-	Filter: syscall.EVFILT_USER,
-	Fflags: syscall.NOTE_TRIGGER,
+	Filter: unix.EVFILT_USER,
+	Fflags: unix.NOTE_TRIGGER,
 }
 
 // NewWatcher returns a Watcher backed by kqueue.
 func NewWatcher() (*Watcher, error) {
-	kq, err := syscall.Kqueue()
+	kq, err := unix.Kqueue()
 	if err != nil {
 		return nil, err
 	}
-	_, err = syscall.Kevent(kq, []syscall.Kevent_t{evCloseRegister}, nil, nil)
+	_, err = unix.Kevent(kq, []unix.Kevent_t{evCloseRegister}, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -210,23 +211,23 @@ func (w *Watcher) Close() error {
 	w.roots = nil
 	kq := w.kq
 	w.mu.Unlock()
-	_, err := syscall.Kevent(kq, []syscall.Kevent_t{evCloseTrigger}, nil, nil)
+	_, err := unix.Kevent(kq, []unix.Kevent_t{evCloseTrigger}, nil, nil)
 	if err != nil {
 		return err
 	}
 	<-w.exited
-	err = syscall.Close(kq)
+	err = unix.Close(kq)
 	return err
 }
 
 func (w *Watcher) openLocked(path string, op Op, parent *kqWatch) (*kqWatch, error) {
-	fd, err := syscall.Open(path, syscall.O_RDONLY|oEvtOnly, 0)
+	fd, err := unix.Open(path, unix.O_RDONLY|oEvtOnly, 0)
 	if err != nil {
 		return nil, err
 	}
 	stat, err := os.Lstat(path)
 	if err != nil {
-		syscall.Close(fd)
+		unix.Close(fd)
 		return nil, err
 	}
 	ww := &kqWatch{
@@ -240,7 +241,7 @@ func (w *Watcher) openLocked(path string, op Op, parent *kqWatch) (*kqWatch, err
 		ww.children = make(map[string]*kqWatch)
 	}
 	if err := w.registerLocked(ww); err != nil {
-		syscall.Close(fd)
+		unix.Close(fd)
 		return nil, err
 	}
 	w.byFd[fd] = ww
@@ -248,10 +249,10 @@ func (w *Watcher) openLocked(path string, op Op, parent *kqWatch) (*kqWatch, err
 }
 
 func (w *Watcher) registerLocked(ww *kqWatch) error {
-	var ev syscall.Kevent_t
-	syscall.SetKevent(&ev, ww.fd, syscall.EVFILT_VNODE, syscall.EV_ADD|syscall.EV_CLEAR)
+	var ev unix.Kevent_t
+	unix.SetKevent(&ev, ww.fd, unix.EVFILT_VNODE, unix.EV_ADD|unix.EV_CLEAR)
 	ev.Fflags = opToNoteFlags(ww.op, ww.isDir)
-	_, err := syscall.Kevent(w.kq, []syscall.Kevent_t{ev}, nil, nil)
+	_, err := unix.Kevent(w.kq, []unix.Kevent_t{ev}, nil, nil)
 	return err
 }
 
@@ -260,7 +261,7 @@ func (w *Watcher) closeTreeLocked(ww *kqWatch) {
 		w.closeTreeLocked(c)
 	}
 	delete(w.byFd, ww.fd)
-	syscall.Close(ww.fd)
+	unix.Close(ww.fd)
 }
 
 func (w *Watcher) readLoop() {
@@ -268,19 +269,19 @@ func (w *Watcher) readLoop() {
 	defer close(w.events)
 	defer close(w.errors)
 
-	events := make([]syscall.Kevent_t, 16)
+	events := make([]unix.Kevent_t, 16)
 	for {
-		n, err := syscall.Kevent(w.kq, nil, events, nil)
+		n, err := unix.Kevent(w.kq, nil, events, nil)
 		select {
 		case <-w.done:
 			return
 		default:
 		}
 		if err != nil {
-			if errors.Is(err, syscall.EINTR) {
+			if errors.Is(err, unix.EINTR) {
 				continue
 			}
-			if errors.Is(err, syscall.EBADF) {
+			if errors.Is(err, unix.EBADF) {
 				return
 			}
 			w.sendError(err)
@@ -292,7 +293,7 @@ func (w *Watcher) readLoop() {
 	}
 }
 
-func (w *Watcher) handleEvent(ev *syscall.Kevent_t) {
+func (w *Watcher) handleEvent(ev *unix.Kevent_t) {
 	fd := int(ev.Ident)
 	fflags := ev.Fflags
 
@@ -312,16 +313,16 @@ func (w *Watcher) handleEvent(ev *syscall.Kevent_t) {
 	parent := ww.parent
 	w.mu.Unlock()
 
-	if fflags&syscall.NOTE_DELETE != 0 && requested.Has(Remove) {
+	if fflags&unix.NOTE_DELETE != 0 && requested.Has(Remove) {
 		w.sendEvent(Event{Name: path, Op: Remove})
 	}
-	if fflags&syscall.NOTE_RENAME != 0 && requested.Has(Rename) {
+	if fflags&unix.NOTE_RENAME != 0 && requested.Has(Rename) {
 		w.sendEvent(Event{Name: path, Op: Rename})
 	}
-	if fflags&syscall.NOTE_ATTRIB != 0 && requested.Has(Chmod) {
+	if fflags&unix.NOTE_ATTRIB != 0 && requested.Has(Chmod) {
 		w.sendEvent(Event{Name: path, Op: Chmod})
 	}
-	if fflags&syscall.NOTE_WRITE != 0 {
+	if fflags&unix.NOTE_WRITE != 0 {
 		if isDir {
 			w.diffDir(ww, requested)
 		} else if requested.Has(Write) {
@@ -329,7 +330,7 @@ func (w *Watcher) handleEvent(ev *syscall.Kevent_t) {
 		}
 	}
 
-	if fflags&(syscall.NOTE_DELETE|syscall.NOTE_RENAME) != 0 {
+	if fflags&(unix.NOTE_DELETE|unix.NOTE_RENAME) != 0 {
 		w.mu.Lock()
 		if parent != nil {
 			delete(parent.children, filepath.Base(path))
@@ -412,17 +413,17 @@ func (w *Watcher) sendError(err error) {
 func opToNoteFlags(op Op, isDir bool) uint32 {
 	var f uint32
 	if op.Has(Remove) {
-		f |= syscall.NOTE_DELETE
+		f |= unix.NOTE_DELETE
 	}
 	if op.Has(Rename) {
-		f |= syscall.NOTE_RENAME
+		f |= unix.NOTE_RENAME
 	}
 	if op.Has(Chmod) {
-		f |= syscall.NOTE_ATTRIB
+		f |= unix.NOTE_ATTRIB
 	}
 	// Directory watches always need NOTE_WRITE to detect Create/Remove of children.
 	if isDir || op.Has(Write) {
-		f |= syscall.NOTE_WRITE
+		f |= unix.NOTE_WRITE
 	}
 	return f
 }
